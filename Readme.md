@@ -1,6 +1,6 @@
 # Widget exporter
 
 ## ToDo
-* sys metrics
 * logger
+* configuration from file
 * widget check
