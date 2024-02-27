@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	kitlog "github.com/go-kit/log"
 )
 
 var initFuncs = make(map[string]func() (Collector, error))
@@ -20,6 +22,7 @@ type Collector interface {
 type AutoFAQCollector struct {
 	AutoFAQURL         string
 	Collectors         map[string]Collector
+	Logger             kitlog.Logger
 	scrapeDurationDesc *prometheus.Desc
 	scrapeSuccessDesc  *prometheus.Desc
 }
@@ -55,7 +58,7 @@ func (a AutoFAQCollector) execute(name string, c Collector, ch chan<- prometheus
 	ch <- prometheus.MustNewConstMetric(a.scrapeSuccessDesc, prometheus.GaugeValue, success, name, a.AutoFAQURL)
 }
 
-func NewAutoFAQCollector(autofaq string) (*AutoFAQCollector, error) {
+func NewAutoFAQCollector(autofaq string, logger kitlog.Logger) (*AutoFAQCollector, error) {
 	collectors := make(map[string]Collector)
 	for name, initFunc := range initFuncs {
 		collector, err := initFunc()
@@ -67,6 +70,7 @@ func NewAutoFAQCollector(autofaq string) (*AutoFAQCollector, error) {
 	return &AutoFAQCollector{
 		AutoFAQURL: autofaq,
 		Collectors: collectors,
+		Logger:     logger,
 		scrapeDurationDesc: prometheus.NewDesc("collector_duration_seconds",
 			"autofaq_exporter: Duration of a collector scrape",
 			[]string{"collector", "site"}, nil),
