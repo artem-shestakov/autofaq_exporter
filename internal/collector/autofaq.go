@@ -86,8 +86,14 @@ func (c *AutoFAQSysInfoCollector) Update(autofaq string, ch chan<- prometheus.Me
 	}
 	ch <- prometheus.MustNewConstMetric(c.UpTime, prometheus.GaugeValue, float64(autoFAQSysInfo.BuildInfo.UpTime))
 	ch <- prometheus.MustNewConstMetric(c.DbUp, prometheus.GaugeValue, float64(dbUp))
+	ch <- prometheus.MustNewConstMetric(c.TotalConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.TotalConnections))
+	ch <- prometheus.MustNewConstMetric(c.ActiveConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.ActiveConnections))
+	ch <- prometheus.MustNewConstMetric(c.IdleConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.IdleConnections))
+	ch <- prometheus.MustNewConstMetric(c.RuntimeTotal, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Total))
+	ch <- prometheus.MustNewConstMetric(c.RuntimeUsed, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Used))
+	ch <- prometheus.MustNewConstMetric(c.RuntimeFree, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Free))
+	ch <- prometheus.MustNewConstMetric(c.GarbageCollectionTime, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.GarbageCollectionTime))
 	ch <- prometheus.MustNewConstMetric(c.Status, prometheus.GaugeValue, float64(status))
-	fmt.Println(autoFAQSysInfo)
 	return err
 }
 
