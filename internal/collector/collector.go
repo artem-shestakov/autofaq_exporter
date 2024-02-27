@@ -51,8 +51,8 @@ func (a AutoFAQCollector) execute(name string, c Collector, ch chan<- prometheus
 	} else {
 		success = 1
 	}
-	ch <- prometheus.MustNewConstMetric(a.scrapeDurationDesc, prometheus.GaugeValue, duration.Seconds(), name)
-	ch <- prometheus.MustNewConstMetric(a.scrapeSuccessDesc, prometheus.GaugeValue, success, name)
+	ch <- prometheus.MustNewConstMetric(a.scrapeDurationDesc, prometheus.GaugeValue, duration.Seconds(), name, a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.scrapeSuccessDesc, prometheus.GaugeValue, success, name, a.AutoFAQURL)
 }
 
 func NewAutoFAQCollector(autofaq string) (*AutoFAQCollector, error) {
@@ -69,9 +69,9 @@ func NewAutoFAQCollector(autofaq string) (*AutoFAQCollector, error) {
 		Collectors: collectors,
 		scrapeDurationDesc: prometheus.NewDesc("collector_duration_seconds",
 			"autofaq_exporter: Duration of a collector scrape",
-			[]string{"collector"}, nil),
+			[]string{"collector", "site"}, nil),
 		scrapeSuccessDesc: prometheus.NewDesc("collector_success",
 			"autofaq_exporter: Whether a collector succeeded",
-			[]string{"collector"}, nil),
+			[]string{"collector", "site"}, nil),
 	}, nil
 }

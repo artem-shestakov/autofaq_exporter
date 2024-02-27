@@ -26,7 +26,7 @@ type BuildInfo struct {
 	AutofaqUrl      string `json:"autofaqUrl"`
 	AutofaqUrlCrud  string `json:"autofaqUrlCrud"`
 	AutofaqUrlQuery string `json:"autofaqUrlQuery"`
-	UpTime          string `json:"upTime"`
+	UpTime          int    `json:"upTime"`
 	AuthType        string `json:"authType"`
 }
 
@@ -71,9 +71,29 @@ func (c *AutoFAQSysInfoCollector) getSysInfo(autofaqURL string) (*AutoFAQSysInfo
 	return &autoFAQSysInfo, nil
 }
 
-func (c *AutoFAQSysInfoCollector) Update(autofaq string, ch chan<- prometheus.Metric) error {
-	autoFAQSysInfo, err := c.getSysInfo(autofaq)
-	fmt.Println(autoFAQSysInfo)
+func (c *AutoFAQSysInfoCollector) Update(autoFAQSite string, ch chan<- prometheus.Metric) error {
+	var dbUp, status int
+	autoFAQSysInfo, err := c.getSysInfo(autoFAQSite)
+	if autoFAQSysInfo.DbInfo.DbUp == "success" {
+		dbUp = 1
+	} else {
+		dbUp = 0
+	}
+	if autoFAQSysInfo.Status == "success" {
+		status = 1
+	} else {
+		status = 0
+	}
+	ch <- prometheus.MustNewConstMetric(c.UpTime, prometheus.GaugeValue, float64(autoFAQSysInfo.BuildInfo.UpTime), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.DbUp, prometheus.GaugeValue, float64(dbUp), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.TotalConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.TotalConnections), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.ActiveConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.ActiveConnections), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.IdleConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.IdleConnections), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.RuntimeTotal, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Total), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.RuntimeUsed, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Used), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.RuntimeFree, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Free), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.GarbageCollectionTime, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.GarbageCollectionTime), autoFAQSite)
+	ch <- prometheus.MustNewConstMetric(c.Status, prometheus.GaugeValue, float64(status), autoFAQSite)
 	return err
 }
 
@@ -83,25 +103,25 @@ func init() {
 
 func NewAutoFAQSysInfoCollector() (Collector, error) {
 	return &AutoFAQSysInfoCollector{
-		UpTime: prometheus.NewDesc("uptime",
-			"Show backend uptime", nil, nil),
-		DbUp: prometheus.NewDesc("db_up",
-			"Show if AutoFAQ database is up", nil, nil),
-		TotalConnections: prometheus.NewDesc("total_conn",
-			"Total connections to DB", nil, nil),
-		ActiveConnections: prometheus.NewDesc("active_conn",
-			"Active connections to DB", nil, nil),
-		IdleConnections: prometheus.NewDesc("idle_conn",
-			"Idle connections to DB", nil, nil),
-		RuntimeTotal: prometheus.NewDesc("tuntime_total",
-			"runtime total", nil, nil),
-		RuntimeFree: prometheus.NewDesc("tuntime_free",
-			"tuntime_free", nil, nil),
-		RuntimeUsed: prometheus.NewDesc("tuntime_used",
-			"tuntime_used", nil, nil),
-		GarbageCollectionTime: prometheus.NewDesc("garbage_collection_time",
-			"garbage_collection_time", nil, nil),
-		Status: prometheus.NewDesc("status",
-			"Show if AutoFAQ backend server is up", nil, nil),
+		UpTime: prometheus.NewDesc("autofaq_sys_uptime",
+			"Show backend uptime", []string{"site"}, nil),
+		DbUp: prometheus.NewDesc("autofaq_sys_db_up",
+			"Show if AutoFAQ database is up", []string{"site"}, nil),
+		TotalConnections: prometheus.NewDesc("autofaq_sys_total_conn",
+			"Total connections to DB", []string{"site"}, nil),
+		ActiveConnections: prometheus.NewDesc("autofaq_sys_active_conn",
+			"Active connections to DB", []string{"site"}, nil),
+		IdleConnections: prometheus.NewDesc("autofaq_sys_idle_conn",
+			"Idle connections to DB", []string{"site"}, nil),
+		RuntimeTotal: prometheus.NewDesc("autofaq_sys_runtime_total",
+			"runtime total", []string{"site"}, nil),
+		RuntimeFree: prometheus.NewDesc("autofaq_sys_runtime_free",
+			"tuntime_free", []string{"site"}, nil),
+		RuntimeUsed: prometheus.NewDesc("autofaq_sys_runtime_used",
+			"tuntime_used", []string{"site"}, nil),
+		GarbageCollectionTime: prometheus.NewDesc("autofaq_sys_garbage_collection_time",
+			"garbage_collection_time", []string{"site"}, nil),
+		Status: prometheus.NewDesc("autofaq_sys_status",
+			"Show if AutoFAQ backend server is up", []string{"site"}, nil),
 	}, nil
 }
