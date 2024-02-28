@@ -1,12 +1,14 @@
 package collector
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
 	kitlog "github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 )
 
 var initFuncs = make(map[string]func() (Collector, error))
@@ -33,15 +35,18 @@ func (a AutoFAQCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (a AutoFAQCollector) Collect(ch chan<- prometheus.Metric) {
+	level.Debug(a.Logger).Log("msg", "Start collect metrics")
 	wg := sync.WaitGroup{}
 	wg.Add(len(a.Collectors))
 	for name, c := range a.Collectors {
 		go func(name string, c Collector) {
+			level.Debug(a.Logger).Log("msg", fmt.Sprintf("Start collect metrics of '%s' collector", name))
 			a.execute(name, c, ch)
 			wg.Done()
 		}(name, c)
 	}
 	wg.Wait()
+	level.Debug(a.Logger).Log("msg", "Finish collect metrics")
 }
 
 func (a AutoFAQCollector) execute(name string, c Collector, ch chan<- prometheus.Metric) {
