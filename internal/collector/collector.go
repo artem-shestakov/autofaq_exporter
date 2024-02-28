@@ -18,9 +18,10 @@ func registerCollector(collector string, initFunc func() (Collector, error)) {
 }
 
 type Collector interface {
-	Update(autofaq string, ch chan<- prometheus.Metric) error
+	Update(autofaq string, logger kitlog.Logger, ch chan<- prometheus.Metric) error
 }
 
+// Main collector to collect child collectors
 type AutoFAQCollector struct {
 	AutoFAQURL         string
 	Collectors         map[string]Collector
@@ -29,11 +30,14 @@ type AutoFAQCollector struct {
 	scrapeSuccessDesc  *prometheus.Desc
 }
 
+// Each and every collector must implement the Describe function.
+// It essentially writes all descriptors to the prometheus desc channel.
 func (a AutoFAQCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- a.scrapeDurationDesc
 	ch <- a.scrapeSuccessDesc
 }
 
+// Collect implements required collect function for all promehteus collectors
 func (a AutoFAQCollector) Collect(ch chan<- prometheus.Metric) {
 	level.Debug(a.Logger).Log("msg", "Start collect metrics")
 	wg := sync.WaitGroup{}
@@ -49,16 +53,22 @@ func (a AutoFAQCollector) Collect(ch chan<- prometheus.Metric) {
 	level.Debug(a.Logger).Log("msg", "Finish collect metrics")
 }
 
+// Get metrics from child collector
+// Each Update collect metrics and publish them
 func (a AutoFAQCollector) execute(name string, c Collector, ch chan<- prometheus.Metric) {
+	level.Debug(a.Logger).Log("msg", fmt.Sprintf("Start execute 'Update' of '%s' collector", name))
+
 	begin := time.Now()
-	err := c.Update(a.AutoFAQURL, ch)
+	err := c.Update(a.AutoFAQURL, a.Logger, ch)
 	duration := time.Since(begin)
 	var success float64
 	if err != nil {
+		level.Error(a.Logger).Log("msg", err.Error())
 		success = 0
 	} else {
 		success = 1
 	}
+	level.Debug(a.Logger).Log("msg", fmt.Sprintf("Finish execute 'Update' of '%s' collector", name))
 	ch <- prometheus.MustNewConstMetric(a.scrapeDurationDesc, prometheus.GaugeValue, duration.Seconds(), name, a.AutoFAQURL)
 	ch <- prometheus.MustNewConstMetric(a.scrapeSuccessDesc, prometheus.GaugeValue, success, name, a.AutoFAQURL)
 }
