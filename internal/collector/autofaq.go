@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
-	kitlog "github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -46,23 +46,10 @@ type RuntimeInfo struct {
 	GarbageCollectionTime int `json:"garbageCollectionTime"`
 }
 
-type AutoFAQSysInfoCollector struct {
-	UpTime                *prometheus.Desc
-	DbUp                  *prometheus.Desc
-	TotalConnections      *prometheus.Desc
-	ActiveConnections     *prometheus.Desc
-	IdleConnections       *prometheus.Desc
-	RuntimeTotal          *prometheus.Desc
-	RuntimeFree           *prometheus.Desc
-	RuntimeUsed           *prometheus.Desc
-	GarbageCollectionTime *prometheus.Desc
-	Status                *prometheus.Desc
-}
-
 // Parse sys info from AutoFAQ site
-func (c *AutoFAQSysInfoCollector) getSysInfo(autofaqURL string) (*AutoFAQSysInfo, error) {
+func (a AutoFAQCollector) getSysInfo() (*AutoFAQSysInfo, error) {
 	var autoFAQSysInfo AutoFAQSysInfo
-	resp, err := http.Get(fmt.Sprintf("%s/api/sysInfo", autofaqURL))
+	resp, err := http.Get(fmt.Sprintf("%s/api/sysInfo", a.AutoFAQURL))
 	if err != nil {
 		return nil, err
 	}
@@ -75,10 +62,15 @@ func (c *AutoFAQSysInfoCollector) getSysInfo(autofaqURL string) (*AutoFAQSysInfo
 }
 
 // Collect metrics and publish them
-func (c *AutoFAQSysInfoCollector) Update(autoFAQSite string, logger kitlog.Logger, ch chan<- prometheus.Metric) error {
+func (a AutoFAQCollector) collectSysMetrics(ch chan<- prometheus.Metric) error {
 	var dbUp, status int
-	level.Debug(logger).Log("msg", fmt.Sprintf("Parse data from '%s'", autoFAQSite))
-	autoFAQSysInfo, err := c.getSysInfo(autoFAQSite)
+	var success = float64(1)
+	begin := time.Now()
+	level.Debug(a.Logger).Log("msg", fmt.Sprintf("Parse data from '%s'", a.AutoFAQURL))
+	autoFAQSysInfo, err := a.getSysInfo()
+	if err != nil {
+		success = 0
+	}
 	if autoFAQSysInfo.DbInfo.DbUp == "success" {
 		dbUp = 1
 	} else {
@@ -89,46 +81,20 @@ func (c *AutoFAQSysInfoCollector) Update(autoFAQSite string, logger kitlog.Logge
 	} else {
 		status = 0
 	}
-	level.Debug(logger).Log("msg", "Publish metrics of 'autofaq_sys_info' collector")
-	ch <- prometheus.MustNewConstMetric(c.UpTime, prometheus.GaugeValue, float64(autoFAQSysInfo.BuildInfo.UpTime), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.DbUp, prometheus.GaugeValue, float64(dbUp), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.TotalConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.TotalConnections), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.ActiveConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.ActiveConnections), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.IdleConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.IdleConnections), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.RuntimeTotal, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Total), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.RuntimeUsed, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Used), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.RuntimeFree, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Free), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.GarbageCollectionTime, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.GarbageCollectionTime), autoFAQSite)
-	ch <- prometheus.MustNewConstMetric(c.Status, prometheus.GaugeValue, float64(status), autoFAQSite)
+	duration := time.Since(begin)
+
+	level.Debug(a.Logger).Log("msg", "Publish metrics of 'autofaq_sys_info' collector")
+	ch <- prometheus.MustNewConstMetric(a.upTime, prometheus.GaugeValue, float64(autoFAQSysInfo.BuildInfo.UpTime), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.dbUp, prometheus.GaugeValue, float64(dbUp), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.totalConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.TotalConnections), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.activeConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.ActiveConnections), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.idleConnections, prometheus.GaugeValue, float64(autoFAQSysInfo.DbInfo.IdleConnections), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.runtimeTotal, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Total), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.runtimeUsed, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Used), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.runtimeFree, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.Free), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.garbageCollectionTime, prometheus.GaugeValue, float64(autoFAQSysInfo.RuntimeInfo.GarbageCollectionTime), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.status, prometheus.GaugeValue, float64(status), a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.scrapeDurationDesc, prometheus.GaugeValue, duration.Seconds(), "autofaq_sys_collector", a.AutoFAQURL)
+	ch <- prometheus.MustNewConstMetric(a.scrapeSuccessDesc, prometheus.GaugeValue, success, "autofaq_sys_collector", a.AutoFAQURL)
 	return err
-}
-
-// Add collector as child collector
-func init() {
-	registerCollector("autofaq_sys_info", NewAutoFAQSysInfoCollector)
-}
-
-func NewAutoFAQSysInfoCollector() (Collector, error) {
-	return &AutoFAQSysInfoCollector{
-		UpTime: prometheus.NewDesc("autofaq_sys_uptime",
-			"Show backend start time", []string{"site"}, nil),
-		DbUp: prometheus.NewDesc("autofaq_sys_db_up",
-			"Show if AutoFAQ database is up", []string{"site"}, nil),
-		TotalConnections: prometheus.NewDesc("autofaq_sys_total_conn",
-			"Total connections to DB", []string{"site"}, nil),
-		ActiveConnections: prometheus.NewDesc("autofaq_sys_active_conn",
-			"Active connections to DB", []string{"site"}, nil),
-		IdleConnections: prometheus.NewDesc("autofaq_sys_idle_conn",
-			"Idle connections to DB", []string{"site"}, nil),
-		RuntimeTotal: prometheus.NewDesc("autofaq_sys_runtime_total",
-			"JVM runtime total memory", []string{"site"}, nil),
-		RuntimeFree: prometheus.NewDesc("autofaq_sys_runtime_free",
-			"JVM tuntime free memory", []string{"site"}, nil),
-		RuntimeUsed: prometheus.NewDesc("autofaq_sys_runtime_used",
-			"JVM tuntime used memory", []string{"site"}, nil),
-		GarbageCollectionTime: prometheus.NewDesc("autofaq_sys_garbage_collection_time",
-			"JVM garbage collection time", []string{"site"}, nil),
-		Status: prometheus.NewDesc("autofaq_sys_status",
-			"Show if AutoFAQ backend server is up", []string{"site"}, nil),
-	}, nil
 }

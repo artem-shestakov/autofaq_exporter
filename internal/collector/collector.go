@@ -1,10 +1,6 @@
 package collector
 
 import (
-	"fmt"
-	"sync"
-	"time"
-
 	"github.com/artem-shestakov/autofaq_exporter/internal/config"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -14,28 +10,45 @@ import (
 
 var initFuncs = make(map[string]func() (Collector, error))
 
-func registerCollector(collector string, initFunc func() (Collector, error)) {
-	initFuncs[collector] = initFunc
-}
-
 type Collector interface {
 	Update(autofaq string, logger kitlog.Logger, ch chan<- prometheus.Metric) error
 }
 
-// Main collector to collect child collectors
+// Collector
 type AutoFAQCollector struct {
-	AutoFAQURL         string
-	Collectors         map[string]Collector
-	Logger             kitlog.Logger
-	Services           []config.Service
-	scrapeDurationDesc *prometheus.Desc
-	scrapeSuccessDesc  *prometheus.Desc
-	WidgetStatus       *prometheus.Desc
+	AutoFAQURL            string
+	Collectors            map[string]Collector
+	Logger                kitlog.Logger
+	Services              []config.Service
+	scrapeDurationDesc    *prometheus.Desc
+	scrapeSuccessDesc     *prometheus.Desc
+	upTime                *prometheus.Desc
+	dbUp                  *prometheus.Desc
+	totalConnections      *prometheus.Desc
+	activeConnections     *prometheus.Desc
+	idleConnections       *prometheus.Desc
+	runtimeTotal          *prometheus.Desc
+	runtimeFree           *prometheus.Desc
+	runtimeUsed           *prometheus.Desc
+	garbageCollectionTime *prometheus.Desc
+	status                *prometheus.Desc
+	widgetStatus          *prometheus.Desc
 }
 
 // Each and every collector must implement the Describe function.
 // It essentially writes all descriptors to the prometheus desc channel.
 func (a AutoFAQCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- a.upTime
+	ch <- a.dbUp
+	ch <- a.totalConnections
+	ch <- a.activeConnections
+	ch <- a.idleConnections
+	ch <- a.runtimeTotal
+	ch <- a.runtimeFree
+	ch <- a.runtimeUsed
+	ch <- a.garbageCollectionTime
+	ch <- a.status
+	ch <- a.widgetStatus
 	ch <- a.scrapeDurationDesc
 	ch <- a.scrapeSuccessDesc
 }
@@ -43,39 +56,12 @@ func (a AutoFAQCollector) Describe(ch chan<- *prometheus.Desc) {
 // Collect implements required collect function for all promehteus collectors
 func (a AutoFAQCollector) Collect(ch chan<- prometheus.Metric) {
 	level.Debug(a.Logger).Log("msg", "Start collect metrics")
-	wg := sync.WaitGroup{}
-	wg.Add(len(a.Collectors))
-	for name, c := range a.Collectors {
-		go func(name string, c Collector) {
-			level.Debug(a.Logger).Log("msg", fmt.Sprintf("Start collect metrics of '%s' collector", name))
-			a.execute(name, c, ch)
-			wg.Done()
-		}(name, c)
-	}
-	wg.Wait()
+
+	// Sys collect
+	a.collectSysMetrics(ch)
 	// Widget collect
 	a.collectWidgetsMetrics(ch)
 	level.Debug(a.Logger).Log("msg", "Finish collect metrics")
-}
-
-// Get metrics from child collector
-// Each Update collect metrics and publish them
-func (a AutoFAQCollector) execute(name string, c Collector, ch chan<- prometheus.Metric) {
-	level.Debug(a.Logger).Log("msg", fmt.Sprintf("Start execute 'Update' of '%s' collector", name))
-
-	begin := time.Now()
-	err := c.Update(a.AutoFAQURL, a.Logger, ch)
-	duration := time.Since(begin)
-	var success float64
-	if err != nil {
-		level.Error(a.Logger).Log("msg", err.Error())
-		success = 0
-	} else {
-		success = 1
-	}
-	level.Debug(a.Logger).Log("msg", fmt.Sprintf("Finish execute 'Update' of '%s' collector", name))
-	ch <- prometheus.MustNewConstMetric(a.scrapeDurationDesc, prometheus.GaugeValue, duration.Seconds(), name, a.AutoFAQURL)
-	ch <- prometheus.MustNewConstMetric(a.scrapeSuccessDesc, prometheus.GaugeValue, success, name, a.AutoFAQURL)
 }
 
 func NewAutoFAQCollector(autofaq string, logger kitlog.Logger, services []config.Service) (*AutoFAQCollector, error) {
@@ -98,7 +84,27 @@ func NewAutoFAQCollector(autofaq string, logger kitlog.Logger, services []config
 		scrapeSuccessDesc: prometheus.NewDesc("collector_success",
 			"autofaq_exporter: Whether a collector succeeded",
 			[]string{"collector", "site"}, nil),
-		WidgetStatus: prometheus.NewDesc("autofaq_widget_status", "Status of widget",
+		upTime: prometheus.NewDesc("autofaq_sys_uptime",
+			"Show backend start time", []string{"site"}, nil),
+		dbUp: prometheus.NewDesc("autofaq_sys_db_up",
+			"Show if AutoFAQ database is up", []string{"site"}, nil),
+		totalConnections: prometheus.NewDesc("autofaq_sys_total_conn",
+			"Total connections to DB", []string{"site"}, nil),
+		activeConnections: prometheus.NewDesc("autofaq_sys_active_conn",
+			"Active connections to DB", []string{"site"}, nil),
+		idleConnections: prometheus.NewDesc("autofaq_sys_idle_conn",
+			"Idle connections to DB", []string{"site"}, nil),
+		runtimeTotal: prometheus.NewDesc("autofaq_sys_runtime_total",
+			"JVM runtime total memory", []string{"site"}, nil),
+		runtimeFree: prometheus.NewDesc("autofaq_sys_runtime_free",
+			"JVM tuntime free memory", []string{"site"}, nil),
+		runtimeUsed: prometheus.NewDesc("autofaq_sys_runtime_used",
+			"JVM tuntime used memory", []string{"site"}, nil),
+		garbageCollectionTime: prometheus.NewDesc("autofaq_sys_garbage_collection_time",
+			"JVM garbage collection time", []string{"site"}, nil),
+		status: prometheus.NewDesc("autofaq_sys_status",
+			"Show if AutoFAQ backend server is up", []string{"site"}, nil),
+		widgetStatus: prometheus.NewDesc("autofaq_widget_status", "Status of widget",
 			[]string{"site", "service_id", "widget_id"}, nil),
 	}, nil
 }
