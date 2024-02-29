@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/artem-shestakov/autofaq_exporter/internal/config"
 	"github.com/prometheus/client_golang/prometheus"
 
 	kitlog "github.com/go-kit/log"
@@ -26,8 +27,10 @@ type AutoFAQCollector struct {
 	AutoFAQURL         string
 	Collectors         map[string]Collector
 	Logger             kitlog.Logger
+	Services           []config.Service
 	scrapeDurationDesc *prometheus.Desc
 	scrapeSuccessDesc  *prometheus.Desc
+	WidgetStatus       *prometheus.Desc
 }
 
 // Each and every collector must implement the Describe function.
@@ -50,6 +53,8 @@ func (a AutoFAQCollector) Collect(ch chan<- prometheus.Metric) {
 		}(name, c)
 	}
 	wg.Wait()
+	// Widget collect
+	a.collectWidgetsMetrics(ch)
 	level.Debug(a.Logger).Log("msg", "Finish collect metrics")
 }
 
@@ -73,7 +78,7 @@ func (a AutoFAQCollector) execute(name string, c Collector, ch chan<- prometheus
 	ch <- prometheus.MustNewConstMetric(a.scrapeSuccessDesc, prometheus.GaugeValue, success, name, a.AutoFAQURL)
 }
 
-func NewAutoFAQCollector(autofaq string, logger kitlog.Logger) (*AutoFAQCollector, error) {
+func NewAutoFAQCollector(autofaq string, logger kitlog.Logger, services []config.Service) (*AutoFAQCollector, error) {
 	collectors := make(map[string]Collector)
 	for name, initFunc := range initFuncs {
 		collector, err := initFunc()
@@ -86,11 +91,14 @@ func NewAutoFAQCollector(autofaq string, logger kitlog.Logger) (*AutoFAQCollecto
 		AutoFAQURL: autofaq,
 		Collectors: collectors,
 		Logger:     logger,
+		Services:   services,
 		scrapeDurationDesc: prometheus.NewDesc("collector_duration_seconds",
 			"autofaq_exporter: Duration of a collector scrape",
 			[]string{"collector", "site"}, nil),
 		scrapeSuccessDesc: prometheus.NewDesc("collector_success",
 			"autofaq_exporter: Whether a collector succeeded",
 			[]string{"collector", "site"}, nil),
+		WidgetStatus: prometheus.NewDesc("autofaq_widget_status", "Status of widget",
+			[]string{"site", "service_id", "widget_id"}, nil),
 	}, nil
 }

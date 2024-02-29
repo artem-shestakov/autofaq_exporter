@@ -28,7 +28,7 @@ func main() {
 	pflag.Parse()
 
 	// Init config
-	_, err := config.InitConfig(configPath, logger)
+	config, err := config.InitConfig(configPath, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", err.Error())
 	}
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	// Create metric collector
-	autoFAQCollector, err := collector.NewAutoFAQCollector(autofaqUrl, logger)
+	autoFAQCollector, err := collector.NewAutoFAQCollector(autofaqUrl, logger, config.Services)
 	if err != nil {
 		level.Error(logger).Log("msg", err.Error())
 		log.Panic(err.Error())
