@@ -25,3 +25,4 @@ services:                           # list of AutoFAQ servicea and widgets of se
 
 ## ToDo
 * widget check
+* exception with incorrect address of AF
